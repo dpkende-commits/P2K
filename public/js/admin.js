@@ -123,36 +123,51 @@
     };
 
     // ============================================================
-    // STORAGE FUNCTIONS
-    // ============================================================
+// STORAGE FUNCTIONS - DENGAN FIREBASE
+// ============================================================
 
-    function saveData() {
-        try {
-            const data = {
-                userData: userData,
-                pesertaData: pesertaData,
-                soalData: soalData,
-                nextUserId: nextUserId,
-                nextPesertaId: nextPesertaId,
-                nextSoalId: nextSoalId,
-                savedAt: new Date().toISOString()
-            };
-            localStorage.setItem('ujianOnlineData', JSON.stringify(data));
-            updateStorageInfo();
-            console.log('✅ Data berhasil disimpan ke localStorage');
-            return true;
-        } catch (e) {
-            console.error('❌ Gagal menyimpan data:', e);
-            showToast('error', '❌ Gagal menyimpan data!');
-            return false;
+function saveData() {
+    try {
+        const data = {
+            userData: userData,
+            pesertaData: pesertaData,
+            soalData: soalData,
+            nextUserId: nextUserId,
+            nextPesertaId: nextPesertaId,
+            nextSoalId: nextSoalId,
+            savedAt: new Date().toISOString()
+        };
+        
+        // Simpan ke localStorage (cache lokal)
+        localStorage.setItem('ujianOnlineData', JSON.stringify(data));
+        updateStorageInfo();
+        
+        // ✅ SIMPAN KE FIREBASE (CLOUD)
+        if (typeof saveDataToFirebase === 'function') {
+            saveDataToFirebase(data).then(function(result) {
+                if (result) {
+                    showToast('success', '☁️ Data tersimpan di cloud!');
+                }
+            });
         }
+        
+        console.log('✅ Data berhasil disimpan ke localStorage & Firebase');
+        return true;
+    } catch (e) {
+        console.error('❌ Gagal menyimpan data:', e);
+        showToast('error', '❌ Gagal menyimpan data!');
+        return false;
     }
+}
 
-    function loadData() {
-        try {
-            const stored = localStorage.getItem('ujianOnlineData');
-            if (stored) {
-                const data = JSON.parse(stored);
+async function loadData() {
+    try {
+        // 1. Coba dari Firebase dulu
+        if (typeof loadDataFromFirebase === 'function') {
+            const cloudData = await loadDataFromFirebase();
+            if (cloudData) {
+                localStorage.setItem('ujianOnlineData', JSON.stringify(cloudData));
+                const data = cloudData;
                 userData = data.userData || [];
                 pesertaData = data.pesertaData || [];
                 soalData = data.soalData || [];
@@ -160,15 +175,31 @@
                 nextPesertaId = data.nextPesertaId || 1;
                 nextSoalId = data.nextSoalId || 1;
                 updateStorageInfo();
-                console.log('✅ Data berhasil dimuat dari localStorage');
+                console.log('✅ Data berhasil dimuat dari Firebase');
                 return true;
             }
-            return false;
-        } catch (e) {
-            console.error('❌ Gagal memuat data:', e);
-            return false;
         }
+        
+        // 2. Fallback ke localStorage
+        const stored = localStorage.getItem('ujianOnlineData');
+        if (stored) {
+            const data = JSON.parse(stored);
+            userData = data.userData || [];
+            pesertaData = data.pesertaData || [];
+            soalData = data.soalData || [];
+            nextUserId = data.nextUserId || 1;
+            nextPesertaId = data.nextPesertaId || 1;
+            nextSoalId = data.nextSoalId || 1;
+            updateStorageInfo();
+            console.log('✅ Data berhasil dimuat dari localStorage');
+            return true;
+        }
+        return false;
+    } catch (e) {
+        console.error('❌ Gagal memuat data:', e);
+        return false;
     }
+}
 
     function clearAllData() {
         localStorage.removeItem('ujianOnlineData');
@@ -1971,13 +2002,17 @@ CATATAN:
     }
 
     function handleLogout() {
-        if (confirm('Apakah Anda yakin ingin keluar?')) {
-            saveData();
+    if (confirm('Apakah Anda yakin ingin keluar?')) {
+        saveData();
+        if (typeof logoutUser === 'function') {
+            logoutUser();
+        } else {
             sessionStorage.removeItem('userSession');
             localStorage.removeItem('userSession');
             window.location.href = '../../public/login.html';
         }
     }
+}
 
     function resetData() {
         if (confirm('⚠️ Apakah Anda yakin ingin mereset SEMUA data? Tindakan ini tidak dapat dibatalkan!')) {
