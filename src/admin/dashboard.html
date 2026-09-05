@@ -53,6 +53,8 @@
                 <button class="btn btn-primary" onclick="openModal('tambahPeserta')">➕ Tambah Peserta</button>
                 <button class="btn btn-success" onclick="openModal('tambahSoal')">📝 Tambah Soal</button>
                 <button class="btn btn-warning" onclick="openModal('uploadSoal')">📄 Upload Word</button>
+                <button class="btn btn-info" onclick="saveDataToGitHub()">☁️ Sync ke GitHub</button>
+                <button class="btn btn-outline" onclick="loadDataFromGitHub(); location.reload();">📥 Pull Data</button>
                 <button class="btn btn-danger" onclick="resetData()">🔄 Reset Data</button>
                 <button class="btn btn-outline" onclick="refreshData()">🔄 Refresh</button>
             </div>
@@ -887,6 +889,7 @@
     JAVASCRIPT
     ============================================================ -->
     <!-- ✅ PASTIKAN admin.js sudah diganti dengan versi terbaru yang mengandung parser Word -->
+    <script src="../../public/js/github-sync.js"></script>
     <script src="../../public/js/admin.js"></script>
 
 </body>

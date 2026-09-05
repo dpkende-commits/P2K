@@ -1141,58 +1141,116 @@
     });
 
     // ============================================================
-    // INIT
+// INIT - DENGAN GITHUB SYNC
+// ============================================================
+
+async function init() {
     // ============================================================
-
-    function init() {
-        if (!checkGuruSession()) {
-            return;
-        }
-
-        console.log('👨‍🏫 Guru Dashboard loaded');
-        console.log('📌 Login sebagai:', currentUser.name);
-
-        // Load status ujian dari Admin
-        loadUjianStatus();
-
-        renderTest();
-        renderUjian();
-
-        // Expose functions globally
-        window.switchTab = switchTab;
-        window.filterSoal = filterSoal;
-        window.printHasil = printHasil;
-        window.printSertifikat = printSertifikat;
-        window.handleLogout = handleLogout;
-        window.startUjian = startUjian;
-        window.submitUjian = submitUjian;
-        window.pilihJawaban = pilihJawaban;
-        window.resetUjian = resetUjian;
-        window.switchUjianType = switchUjianType;
-        window.renderUjian = renderUjian;
-        window.renderTest = renderTest;
-        window.closeResultModal = closeResultModal;
-        window.loadUjianStatus = loadUjianStatus;
-
-        const data = getDataFromStorage();
-        if (data) {
-            console.log(`📊 Data dari localStorage:`);
-            console.log(`  👤 User: ${data.userData ? data.userData.length : 0}`);
-            console.log(`  👥 Peserta: ${data.pesertaData ? data.pesertaData.length : 0}`);
-            console.log(`  📝 Soal: ${data.soalData ? data.soalData.length : 0}`);
-        }
-
-        console.log('✅ Guru Dashboard ready');
-        console.log('📋 2 Halaman: Test (Profil + Soal) dan Ujian');
-        console.log(`⏱️ Pretest: ${CONFIG.pretestDuration/60} menit | Posttest: ${CONFIG.posttestDuration/60} menit`);
-        console.log('📋 Status ujian terintegrasi dengan Admin');
-        console.log('💡 Shortcut: Escape = Tutup modal');
+    // 1. CEK SESSION GURU
+    // ============================================================
+    if (!checkGuruSession()) {
+        return;
     }
 
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', init);
-    } else {
-        init();
+    console.log('👨‍🏫 Guru Dashboard loaded');
+    console.log('📌 Login sebagai:', currentUser.name);
+
+    // ============================================================
+    // 2. LOAD DATA DARI GITHUB (SYNC)
+    // ============================================================
+    console.log('📥 Mencoba sync data dari GitHub...');
+    
+    try {
+        // Cek apakah fungsi loadDataFromGitHub tersedia
+        if (typeof loadDataFromGitHub === 'function') {
+            const loaded = await loadDataFromGitHub();
+            
+            if (loaded) {
+                console.log('✅ Data berhasil disinkronisasi dari GitHub');
+                showToast('success', '☁️ Data berhasil disinkronisasi dari GitHub!');
+            } else {
+                console.log('📌 Tidak ada data baru dari GitHub, menggunakan data lokal');
+            }
+        } else {
+            console.warn('⚠️ Fungsi loadDataFromGitHub tidak ditemukan. Pastikan github-sync.js sudah di-load.');
+        }
+    } catch (error) {
+        console.error('❌ Gagal sync dari GitHub:', error);
+        // Lanjutkan dengan data lokal
     }
 
-})();
+    // ============================================================
+    // 3. LOAD STATUS UJIAN DARI ADMIN
+    // ============================================================
+    loadUjianStatus();
+
+    // ============================================================
+    // 4. RENDER SEMUA DATA
+    // ============================================================
+    renderTest();
+    renderUjian();
+
+    // ============================================================
+    // 5. UPDATE SYNC STATUS DI UI
+    // ============================================================
+    const syncStatus = document.getElementById('syncStatus');
+    if (syncStatus && typeof getSyncStatus === 'function') {
+        syncStatus.textContent = getSyncStatus();
+    }
+
+    // ============================================================
+    // 6. LOGGING
+    // ============================================================
+    const data = getDataFromStorage();
+    if (data) {
+        console.log(`📊 Data dari localStorage:`);
+        console.log(`  👤 User: ${data.userData ? data.userData.length : 0}`);
+        console.log(`  👥 Peserta: ${data.pesertaData ? data.pesertaData.length : 0}`);
+        console.log(`  📝 Soal: ${data.soalData ? data.soalData.length : 0}`);
+    }
+
+    console.log('✅ Guru Dashboard ready');
+    console.log('📋 2 Halaman: Test (Profil + Soal) dan Ujian');
+    console.log(`⏱️ Pretest: ${CONFIG.pretestDuration/60} menit | Posttest: ${CONFIG.posttestDuration/60} menit`);
+    console.log('📋 Status ujian terintegrasi dengan Admin');
+    console.log('☁️ GitHub Sync:', typeof loadDataFromGitHub === 'function' ? '✅ Tersedia' : '❌ Tidak tersedia');
+    console.log('💡 Shortcut: Escape = Tutup modal');
+
+    // ============================================================
+    // 7. EXPOSE FUNCTIONS GLOBALLY
+    // ============================================================
+    window.switchTab = switchTab;
+    window.filterSoal = filterSoal;
+    window.printHasil = printHasil;
+    window.printSertifikat = printSertifikat;
+    window.handleLogout = handleLogout;
+    window.startUjian = startUjian;
+    window.submitUjian = submitUjian;
+    window.pilihJawaban = pilihJawaban;
+    window.resetUjian = resetUjian;
+    window.switchUjianType = switchUjianType;
+    window.renderUjian = renderUjian;
+    window.renderTest = renderTest;
+    window.closeResultModal = closeResultModal;
+    window.loadUjianStatus = loadUjianStatus;
+    
+    // ✅ EXPOSE GITHUB SYNC FUNCTIONS
+    if (typeof loadDataFromGitHub === 'function') {
+        window.loadDataFromGitHub = loadDataFromGitHub;
+    }
+    if (typeof saveDataToGitHub === 'function') {
+        window.saveDataToGitHub = saveDataToGitHub;
+    }
+    if (typeof getSyncStatus === 'function') {
+        window.getSyncStatus = getSyncStatus;
+    }
+}
+
+// ============================================================
+// RUN ON DOM READY
+// ============================================================
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+} else {
+    init();
+}

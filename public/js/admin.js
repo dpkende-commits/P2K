@@ -125,26 +125,37 @@
     // ============================================================
 
     function saveData() {
-        try {
-            const data = {
-                userData: userData,
-                pesertaData: pesertaData,
-                soalData: soalData,
-                nextUserId: nextUserId,
-                nextPesertaId: nextPesertaId,
-                nextSoalId: nextSoalId,
-                savedAt: new Date().toISOString()
-            };
-            localStorage.setItem('ujianOnlineData', JSON.stringify(data));
-            updateStorageInfo();
-            console.log('✅ Data berhasil disimpan ke localStorage');
-            return true;
-        } catch (e) {
-            console.error('❌ Gagal menyimpan data:', e);
-            showToast('error', '❌ Gagal menyimpan data!');
-            return false;
+    try {
+        const data = {
+            userData: userData,
+            pesertaData: pesertaData,
+            soalData: soalData,
+            nextUserId: nextUserId,
+            nextPesertaId: nextPesertaId,
+            nextSoalId: nextSoalId,
+            savedAt: new Date().toISOString()
+        };
+        localStorage.setItem('ujianOnlineData', JSON.stringify(data));
+        updateStorageInfo();
+        
+        // ============================================================
+        // ✅ TAMBAHKAN: Sync ke GitHub
+        // ============================================================
+        if (typeof saveDataToGitHub === 'function') {
+            // Jalankan tanpa blocking (background)
+            setTimeout(() => {
+                saveDataToGitHub();
+            }, 500);
         }
+        
+        console.log('✅ Data berhasil disimpan ke localStorage');
+        return true;
+    } catch (e) {
+        console.error('❌ Gagal menyimpan data:', e);
+        showToast('error', '❌ Gagal menyimpan data!');
+        return false;
     }
+}
 
     function loadData() {
         try {
@@ -497,13 +508,11 @@
         }
     }
 
-    // ============================================================
-    // ============================================================
+  
     // ============================================================
     // PARSER WORD - FUNGSI UTAMA
     // ============================================================
-    // ============================================================
-    // ============================================================
+
 
     /**
      * PARSE FILE WORD (.docx) MENJADI ARRAY SOAL
@@ -2282,181 +2291,249 @@
     }
 
     // ============================================================
-    // INIT
+// INIT - DENGAN GITHUB SYNC
+// ============================================================
+
+async function init() {
     // ============================================================
+    // 1. CEK SESSION
+    // ============================================================
+    let session = sessionStorage.getItem('userSession');
+    if (!session) session = localStorage.getItem('userSession');
 
-    function init() {
-        // Cek session
-        let session = sessionStorage.getItem('userSession');
-        if (!session) session = localStorage.getItem('userSession');
+    if (!session) {
+        window.location.href = '../../public/login.html';
+        return;
+    }
 
-        if (!session) {
+    try {
+        const data = JSON.parse(session);
+        if (data.user.role !== 'admin') {
             window.location.href = '../../public/login.html';
             return;
         }
-
-        try {
-            const data = JSON.parse(session);
-            if (data.user.role !== 'admin') {
-                window.location.href = '../../public/login.html';
-                return;
-            }
-            if (elements.adminName) {
-                elements.adminName.textContent = data.user.name || 'Administrator';
-            }
-            console.log('👑 Login sebagai:', data.user.name);
-        } catch (e) {
-            window.location.href = '../../public/login.html';
+        if (elements.adminName) {
+            elements.adminName.textContent = data.user.name || 'Administrator';
         }
-
-        // Load data
-        const hasData = loadData();
-
-        if (!hasData) {
-            createDefaultAdmin();
-        } else {
-            const hasAdmin = userData.some(u => u.username === 'admin');
-            if (!hasAdmin) {
-                createDefaultAdmin();
-            }
-        }
-
-        // Load status ujian
-        loadUjianStatus();
-
-        // Render semua data
-        refreshData();
-
-        // Setup drag & drop
-        const uploadArea = elements.uploadArea;
-        if (uploadArea) {
-            uploadArea.addEventListener('dragover', function(e) {
-                e.preventDefault();
-                this.classList.add('dragover');
-            });
-
-            uploadArea.addEventListener('dragleave', function(e) {
-                e.preventDefault();
-                this.classList.remove('dragover');
-            });
-
-            uploadArea.addEventListener('drop', function(e) {
-                e.preventDefault();
-                this.classList.remove('dragover');
-                const files = e.dataTransfer.files;
-                if (files.length > 0) {
-                    const file = files[0];
-                    const input = elements.fileInput;
-                    if (input) {
-                        const dataTransfer = new DataTransfer();
-                        dataTransfer.items.add(file);
-                        input.files = dataTransfer.files;
-                        handleFileUpload({ target: input });
-                    }
-                }
-            });
-        }
-
-        // Close modal on overlay click
-        document.querySelectorAll('.modal-overlay').forEach(overlay => {
-            overlay.addEventListener('click', function(e) {
-                if (e.target === this) {
-                    this.classList.remove('show');
-                }
-            });
-        });
-
-        // Toggle guru fields on role change
-        const userRole = document.getElementById('userRole');
-        if (userRole) {
-            userRole.addEventListener('change', toggleGuruFields);
-        }
-
-        // Keyboard shortcuts
-        document.addEventListener('keydown', function(e) {
-            if (e.key === 'Escape') {
-                document.querySelectorAll('.modal-overlay.show').forEach(m => m.classList.remove('show'));
-            }
-
-            if (e.ctrlKey && e.key === 's') {
-                e.preventDefault();
-                saveData();
-                showToast('success', '💾 Data berhasil disimpan!');
-            }
-        });
-
-        console.log('✅ Admin Dashboard loaded');
-        console.log(`👤 Total User: ${userData.length}`);
-        console.log(`👥 Total Peserta: ${pesertaData.length}`);
-        console.log(`📝 Total Soal: ${soalData.length}`);
-        console.log('💾 Data disimpan di localStorage');
-        console.log('🔐 Default Admin: admin / admin123');
-        console.log('📋 Status Ujian:', ujianStatus);
-        console.log('💡 Keyboard Shortcuts:');
-        console.log('  Ctrl + S = Simpan data');
-        console.log('  Escape = Tutup modal');
-
-        // Expose functions globally
-        window.switchTab = switchTab;
-        window.openModal = openModal;
-        window.closeModal = closeModal;
-        window.refreshData = refreshData;
-        window.filterUserTable = filterUserTable;
-        window.filterTable = filterTable;
-        window.filterSoalTable = filterSoalTable;
-        window.filterHasilTable = filterHasilTable;
-        window.updateChart = updateChart;
-        window.viewDetail = viewDetail;
-        window.handleLogout = handleLogout;
-        window.resetData = resetData;
-        window.toggleGuruFields = toggleGuruFields;
-        window.tambahUser = tambahUser;
-        window.editUser = editUser;
-        window.viewUser = viewUser;
-        window.deleteUser = deleteUser;
-        window.tambahPeserta = tambahPeserta;
-        window.editPesertaGroup = editPesertaGroup;
-        window.viewPesertaGroup = viewPesertaGroup;
-        window.deletePesertaGroup = deletePesertaGroup;
-        window.editPeserta = editPeserta;
-        window.viewPeserta = viewPeserta;
-        window.deletePeserta = deletePeserta;
-        window.tambahSoal = tambahSoal;
-        window.deleteSoal = deleteSoal;
-        window.hapusSemuaSoal = hapusSemuaSoal;
-        window.editExistingSoal = editExistingSoal;
-        window.saveEditExistingSoal = saveEditExistingSoal;
-        window.handleFileUpload = handleFileUpload;
-        window.startUpload = startUpload;
-        window.parseWordFile = parseWordFile;
-        window.parseQuestionsFromText = parseQuestionsFromText;
-        window.showPreview = showPreview;
-        window.editUploadedSoal = editUploadedSoal;
-        window.saveEditUploadedSoal = saveEditUploadedSoal;
-        window.deleteUploadedSoal = deleteUploadedSoal;
-        window.clearPreview = clearPreview;
-        window.saveUploadedSoal = saveUploadedSoal;
-        window.downloadTemplate = downloadTemplate;
-        window.generateSampleHasilUjian = generateSampleHasilUjian;
-        window.hapusHasilUjian = hapusHasilUjian;
-        window.hapusSemuaHasil = hapusSemuaHasil;
-        window.cetakHasilUjian = cetakHasilUjian;
-        window.refreshHasilUjian = refreshHasilUjian;
-        window.renderHasilUjian = renderHasilUjian;
-        window.toggleUjian = toggleUjian;
-        window.loadUjianStatus = loadUjianStatus;
-        window.getUjianStatus = getUjianStatus;
-        window.isUjianAktif = isUjianAktif;
-        window.updateUjianUI = updateUjianUI;
-        window.renderStats = renderStats;
-        window.groupPesertaByName = groupPesertaByName;
+        console.log('👑 Login sebagai:', data.user.name);
+    } catch (e) {
+        window.location.href = '../../public/login.html';
+        return;
     }
 
-    // Run on DOM ready
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', init);
+    // ============================================================
+    // 2. LOAD DATA DARI LOCALSTORAGE
+    // ============================================================
+    const hasData = loadData();
+
+    if (!hasData) {
+        createDefaultAdmin();
     } else {
-        init();
+        const hasAdmin = userData.some(u => u.username === 'admin');
+        if (!hasAdmin) {
+            createDefaultAdmin();
+        }
     }
 
-})();
+    // ============================================================
+    // 3. LOAD DATA DARI GITHUB (SYNC)
+    // ============================================================
+    console.log('📥 Mencoba sync data dari GitHub...');
+    
+    try {
+        // Cek apakah fungsi loadDataFromGitHub tersedia
+        if (typeof loadDataFromGitHub === 'function') {
+            const loaded = await loadDataFromGitHub();
+            
+            if (loaded) {
+                // Reload data dari localStorage setelah sync
+                loadData();
+                console.log('✅ Data berhasil disinkronisasi dari GitHub');
+                showToast('success', '☁️ Data berhasil disinkronisasi dari GitHub!');
+            } else {
+                console.log('📌 Tidak ada data baru dari GitHub, menggunakan data lokal');
+            }
+        } else {
+            console.warn('⚠️ Fungsi loadDataFromGitHub tidak ditemukan. Pastikan github-sync.js sudah di-load.');
+        }
+    } catch (error) {
+        console.error('❌ Gagal sync dari GitHub:', error);
+        // Lanjutkan dengan data lokal
+    }
+
+    // ============================================================
+    // 4. LOAD STATUS UJIAN
+    // ============================================================
+    loadUjianStatus();
+
+    // ============================================================
+    // 5. RENDER SEMUA DATA
+    // ============================================================
+    refreshData();
+
+    // ============================================================
+    // 6. SETUP DRAG & DROP
+    // ============================================================
+    const uploadArea = elements.uploadArea;
+    if (uploadArea) {
+        uploadArea.addEventListener('dragover', function(e) {
+            e.preventDefault();
+            this.classList.add('dragover');
+        });
+
+        uploadArea.addEventListener('dragleave', function(e) {
+            e.preventDefault();
+            this.classList.remove('dragover');
+        });
+
+        uploadArea.addEventListener('drop', function(e) {
+            e.preventDefault();
+            this.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                const file = files[0];
+                const input = elements.fileInput;
+                if (input) {
+                    const dataTransfer = new DataTransfer();
+                    dataTransfer.items.add(file);
+                    input.files = dataTransfer.files;
+                    handleFileUpload({ target: input });
+                }
+            }
+        });
+    }
+
+    // ============================================================
+    // 7. CLOSE MODAL ON OVERLAY CLICK
+    // ============================================================
+    document.querySelectorAll('.modal-overlay').forEach(overlay => {
+        overlay.addEventListener('click', function(e) {
+            if (e.target === this) {
+                this.classList.remove('show');
+            }
+        });
+    });
+
+    // ============================================================
+    // 8. TOGGLE GURU FIELDS ON ROLE CHANGE
+    // ============================================================
+    const userRole = document.getElementById('userRole');
+    if (userRole) {
+        userRole.addEventListener('change', toggleGuruFields);
+    }
+
+    // ============================================================
+    // 9. KEYBOARD SHORTCUTS
+    // ============================================================
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+            document.querySelectorAll('.modal-overlay.show').forEach(m => m.classList.remove('show'));
+        }
+
+        if (e.ctrlKey && e.key === 's') {
+            e.preventDefault();
+            saveData();
+            showToast('success', '💾 Data berhasil disimpan!');
+        }
+    });
+
+    // ============================================================
+    // 10. UPDATE SYNC STATUS DI UI
+    // ============================================================
+    const syncStatus = document.getElementById('syncStatus');
+    if (syncStatus && typeof getSyncStatus === 'function') {
+        syncStatus.textContent = getSyncStatus();
+    }
+
+    // ============================================================
+    // 11. LOGGING
+    // ============================================================
+    console.log('✅ Admin Dashboard loaded');
+    console.log(`👤 Total User: ${userData.length}`);
+    console.log(`👥 Total Peserta: ${pesertaData.length}`);
+    console.log(`📝 Total Soal: ${soalData.length}`);
+    console.log('💾 Data disimpan di localStorage');
+    console.log('🔐 Default Admin: admin / admin123');
+    console.log('📋 Status Ujian:', ujianStatus);
+    console.log('☁️ GitHub Sync:', typeof loadDataFromGitHub === 'function' ? '✅ Tersedia' : '❌ Tidak tersedia');
+    console.log('💡 Keyboard Shortcuts:');
+    console.log('  Ctrl + S = Simpan data');
+    console.log('  Escape = Tutup modal');
+
+    // ============================================================
+    // 12. EXPOSE FUNCTIONS GLOBALLY
+    // ============================================================
+    window.switchTab = switchTab;
+    window.openModal = openModal;
+    window.closeModal = closeModal;
+    window.refreshData = refreshData;
+    window.filterUserTable = filterUserTable;
+    window.filterTable = filterTable;
+    window.filterSoalTable = filterSoalTable;
+    window.filterHasilTable = filterHasilTable;
+    window.updateChart = updateChart;
+    window.viewDetail = viewDetail;
+    window.handleLogout = handleLogout;
+    window.resetData = resetData;
+    window.toggleGuruFields = toggleGuruFields;
+    window.tambahUser = tambahUser;
+    window.editUser = editUser;
+    window.viewUser = viewUser;
+    window.deleteUser = deleteUser;
+    window.tambahPeserta = tambahPeserta;
+    window.editPesertaGroup = editPesertaGroup;
+    window.viewPesertaGroup = viewPesertaGroup;
+    window.deletePesertaGroup = deletePesertaGroup;
+    window.editPeserta = editPeserta;
+    window.viewPeserta = viewPeserta;
+    window.deletePeserta = deletePeserta;
+    window.tambahSoal = tambahSoal;
+    window.deleteSoal = deleteSoal;
+    window.hapusSemuaSoal = hapusSemuaSoal;
+    window.editExistingSoal = editExistingSoal;
+    window.saveEditExistingSoal = saveEditExistingSoal;
+    window.handleFileUpload = handleFileUpload;
+    window.startUpload = startUpload;
+    window.parseWordFile = parseWordFile;
+    window.parseQuestionsFromText = parseQuestionsFromText;
+    window.showPreview = showPreview;
+    window.editUploadedSoal = editUploadedSoal;
+    window.saveEditUploadedSoal = saveEditUploadedSoal;
+    window.deleteUploadedSoal = deleteUploadedSoal;
+    window.clearPreview = clearPreview;
+    window.saveUploadedSoal = saveUploadedSoal;
+    window.downloadTemplate = downloadTemplate;
+    window.generateSampleHasilUjian = generateSampleHasilUjian;
+    window.hapusHasilUjian = hapusHasilUjian;
+    window.hapusSemuaHasil = hapusSemuaHasil;
+    window.cetakHasilUjian = cetakHasilUjian;
+    window.refreshHasilUjian = refreshHasilUjian;
+    window.renderHasilUjian = renderHasilUjian;
+    window.toggleUjian = toggleUjian;
+    window.loadUjianStatus = loadUjianStatus;
+    window.getUjianStatus = getUjianStatus;
+    window.isUjianAktif = isUjianAktif;
+    window.updateUjianUI = updateUjianUI;
+    window.renderStats = renderStats;
+    window.groupPesertaByName = groupPesertaByName;
+    
+    // ✅ EXPOSE GITHUB SYNC FUNCTIONS
+    if (typeof loadDataFromGitHub === 'function') {
+        window.loadDataFromGitHub = loadDataFromGitHub;
+    }
+    if (typeof saveDataToGitHub === 'function') {
+        window.saveDataToGitHub = saveDataToGitHub;
+    }
+    if (typeof getSyncStatus === 'function') {
+        window.getSyncStatus = getSyncStatus;
+    }
+}
+
+// ============================================================
+// RUN ON DOM READY
+// ============================================================
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+} else {
+    init();
+}
