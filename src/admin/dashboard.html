@@ -5,16 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Admin Dashboard - Ujian Online</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../../public/css/style.css">
+    <link rel="stylesheet" href="../../public/css/navbar.css">
+    <link rel="stylesheet" href="../../public/css/admin.css">
     
-    <!-- ✅ PATH YANG BENAR -->
-    <link rel="stylesheet" href="../public/css/style.css">
-    <link rel="stylesheet" href="../public/css/navbar.css">
-    <link rel="stylesheet" href="../public/css/admin.css">
-    
-    <!-- ✅ Library Mammoth.js -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js">
-    </script>
-    
+    <!-- ============================================================
+    ✅ Library Mammoth.js untuk parsing file Word
+    ============================================================ -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+
     <!-- Firebase SDK -->
     <script type="importmap">
     {
@@ -26,9 +25,9 @@
     }
     </script>
 
-    <!-- Firebase Config & CRUD -->
-    <script src="../public/js/firebase-config.js" type="module"></script>
-    <script src="../public/js/firebase-crud.js" type="module"></script>
+    <!-- Firebase Config (Module) -->
+    <script src="../../public/js/firebase-config.js" type="module"></script>
+    <script src="../../public/js/firebase-crud.js" type="module"></script>
 </head>
 <body>
 
@@ -679,7 +678,7 @@
                 </div>
                 <div class="form-group">
                     <label>Pertanyaan <span class="required">*</span></label>
-                    <input type="text" id="pertanyaanSoal" placeholder="Masukkan pertanyaan" required>
+                    <textarea id="pertanyaanSoal" placeholder="Masukkan pertanyaan" required rows="3"></textarea>
                 </div>
                 <div class="form-group">
                     <label>Pilihan A <span class="required">*</span></label>
@@ -719,7 +718,7 @@
     </div>
 
     <!-- ============================================================
-    MODAL UPLOAD SOAL DARI WORD
+    MODAL UPLOAD SOAL DARI WORD (DIPERBAIKI)
     ============================================================ -->
     <div class="modal-overlay" id="modalUploadSoal">
         <div class="modal" style="max-width:700px;">
@@ -741,7 +740,10 @@
                 </select>
             </div>
 
-            <div class="upload-area" id="uploadArea" onclick="document.getElementById('fileInput').click()">
+            <div class="upload-area" id="uploadArea" onclick="document.getElementById('fileInput').click()" 
+                 ondragover="event.preventDefault(); this.classList.add('dragover');"
+                 ondragleave="this.classList.remove('dragover');"
+                 ondrop="handleDrop(event)">
                 <div class="upload-icon">📤</div>
                 <div class="upload-title">Klik atau drag & drop file Word</div>
                 <div class="upload-desc">Upload file .docx dengan format soal</div>
@@ -861,7 +863,7 @@
                 </div>
                 <div class="form-group">
                     <label>Pertanyaan</label>
-                    <input type="text" id="editPertanyaan" placeholder="Masukkan pertanyaan" required>
+                    <textarea id="editPertanyaan" placeholder="Masukkan pertanyaan" required rows="3"></textarea>
                 </div>
                 <div class="form-group">
                     <label>Pilihan A</label>
@@ -903,9 +905,8 @@
     <!-- ============================================================
     JAVASCRIPT
     ============================================================ -->
-    <!-- ✅ PATH YANG BENAR -->
-    <script src="../public/js/github-sync.js"></script>
-    <script src="../public/js/admin.js"></script>
+    <script src="../../public/js/github-sync.js"></script>
+    <script src="../../public/js/admin.js"></script>
 
 </body>
 </html>
