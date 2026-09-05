@@ -1,7 +1,9 @@
 // ============================================================
 // ADMIN DASHBOARD JS - Ujian Online System
-// VERSI: 3.1.0 - DENGAN PARSER WORD
+// VERSI: 3.0.1 - LENGKAP (Dengan Perbaikan Upload Word via Mammoth.js)
 // ============================================================
+// PASTIKAN ANDA MENAMBAHKAN INI DI HTML: 
+// <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
 
 (function() {
     'use strict';
@@ -125,37 +127,26 @@
     // ============================================================
 
     function saveData() {
-    try {
-        const data = {
-            userData: userData,
-            pesertaData: pesertaData,
-            soalData: soalData,
-            nextUserId: nextUserId,
-            nextPesertaId: nextPesertaId,
-            nextSoalId: nextSoalId,
-            savedAt: new Date().toISOString()
-        };
-        localStorage.setItem('ujianOnlineData', JSON.stringify(data));
-        updateStorageInfo();
-        
-        // ============================================================
-        // ✅ TAMBAHKAN: Sync ke GitHub
-        // ============================================================
-        if (typeof saveDataToGitHub === 'function') {
-            // Jalankan tanpa blocking (background)
-            setTimeout(() => {
-                saveDataToGitHub();
-            }, 500);
+        try {
+            const data = {
+                userData: userData,
+                pesertaData: pesertaData,
+                soalData: soalData,
+                nextUserId: nextUserId,
+                nextPesertaId: nextPesertaId,
+                nextSoalId: nextSoalId,
+                savedAt: new Date().toISOString()
+            };
+            localStorage.setItem('ujianOnlineData', JSON.stringify(data));
+            updateStorageInfo();
+            console.log('✅ Data berhasil disimpan ke localStorage');
+            return true;
+        } catch (e) {
+            console.error('❌ Gagal menyimpan data:', e);
+            showToast('error', '❌ Gagal menyimpan data!');
+            return false;
         }
-        
-        console.log('✅ Data berhasil disimpan ke localStorage');
-        return true;
-    } catch (e) {
-        console.error('❌ Gagal menyimpan data:', e);
-        showToast('error', '❌ Gagal menyimpan data!');
-        return false;
     }
-}
 
     function loadData() {
         try {
@@ -295,7 +286,7 @@
     }
 
     // ============================================================
-    // UJIAN STATUS FUNCTIONS
+    // UJIAN STATUS FUNCTIONS (Aktif/Nonaktif)
     // ============================================================
 
     function loadUjianStatus() {
@@ -508,326 +499,25 @@
         }
     }
 
-  
     // ============================================================
-    // PARSER WORD - FUNGSI UTAMA
-    // ============================================================
-
-
-    /**
-     * PARSE FILE WORD (.docx) MENJADI ARRAY SOAL
-     * Fungsi ini membaca file .docx dan mengekstrak soal
-     * Menggunakan library mammoth.js untuk ekstraksi teks
-     */
-    async function parseWordFile(file) {
-        try {
-            // Cek apakah mammoth tersedia
-            if (typeof mammoth === 'undefined') {
-                showToast('error', '❌ Library mammoth.js tidak ditemukan! Tambahkan script mammoth.js');
-                console.error('❌ mammoth.js tidak ditemukan!');
-                return;
-            }
-
-            // Baca file sebagai ArrayBuffer
-            const arrayBuffer = await file.arrayBuffer();
-            
-            // Ekstrak teks menggunakan mammoth
-            const result = await mammoth.extractRawText({ arrayBuffer: arrayBuffer });
-            const text = result.value;
-            
-            console.log('📄 Teks hasil parsing (pertama 500 karakter):', text.substring(0, 500));
-            console.log('📄 Total panjang teks:', text.length, 'karakter');
-            
-            if (!text || text.trim().length < 10) {
-                showToast('error', '❌ File tidak mengandung teks yang dapat dibaca!');
-                return;
-            }
-            
-            // Parsing teks menjadi array soal
-            const parsedQuestions = parseQuestionsFromText(text);
-            
-            if (parsedQuestions.length === 0) {
-                showToast('error', '❌ Tidak ditemukan soal dalam file. Periksa format template!');
-                console.log('❌ Tidak ada soal yang terdeteksi. Teks yang diproses:', text);
-                return;
-            }
-            
-            // Simpan hasil parsing
-            uploadedSoalData = parsedQuestions.map((q, index) => ({
-                id: 'temp_' + Date.now() + '_' + index,
-                pertanyaan: q.pertanyaan || 'Soal tidak memiliki pertanyaan',
-                a: q.a || '-',
-                b: q.b || '-',
-                c: q.c || '-',
-                d: q.d || '-',
-                jawaban: q.jawaban || 'A',
-                bobot: 1
-            }));
-            
-            console.log('📝 Hasil parsing:', uploadedSoalData);
-            console.log(`📝 Total soal: ${uploadedSoalData.length}`);
-            
-            // Tampilkan preview
-            showPreview();
-            
-            // Update UI upload area
-            const uploadArea = elements.uploadArea;
-            if (uploadArea) {
-                uploadArea.style.borderColor = '#059669';
-                const title = uploadArea.querySelector('.upload-title');
-                const desc = uploadArea.querySelector('.upload-desc');
-                if (title) title.textContent = '✅ File berhasil diupload!';
-                if (desc) desc.textContent = `Ditemukan ${uploadedSoalData.length} soal dari file "${file.name}"`;
-            }
-            
-            showToast('success', `📄 ${uploadedSoalData.length} soal ditemukan dari file "${file.name}"`);
-            
-        } catch (error) {
-            console.error('❌ Error parsing file:', error);
-            showToast('error', '❌ Gagal membaca file. Pastikan file .docx valid!');
-        }
-    }
-
-    /**
-     * PARSING TEKS MENJADI ARRAY SOAL
-     * Mendukung berbagai format:
-     * 1. "Pertanyaan:" + "Pilihan A:" + "Jawaban:"
-     * 2. "1." + "A." + "B." + "C." + "D." + "Jawaban:"
-     * 3. Separator --- atau ===
-     */
-    function parseQuestionsFromText(text) {
-        const questions = [];
-        
-        // Normalisasi teks
-        let cleanText = text
-            .replace(/\r\n/g, '\n')
-            .replace(/\r/g, '\n')
-            .replace(/\t/g, ' ')
-            .replace(/\u2013/g, '-')
-            .replace(/\u2014/g, '-')
-            .replace(/\u2018/g, "'")
-            .replace(/\u2019/g, "'")
-            .replace(/\u201C/g, '"')
-            .replace(/\u201D/g, '"')
-            .trim();
-        
-        console.log('🔍 Mulai parsing teks...');
-        
-        // ============================================================
-        // METODE 1: Format "Pertanyaan:" + "Pilihan A:" + "Jawaban:"
-        // ============================================================
-        const questionRegex = /(?:Pertanyaan|Soal)\s*[:.]\s*([^\n]+)((?:\s*(?:Pilihan\s*[A-D]|[A-D]\.)\s*[:.]?\s*[^\n]+)+)(?:\s*Jawaban\s*[:.]?\s*([A-D]))/gi;
-        
-        let match;
-        while ((match = questionRegex.exec(cleanText)) !== null) {
-            const pertanyaan = match[1].trim();
-            const optionsBlock = match[2];
-            const jawaban = match[3] ? match[3].trim().toUpperCase() : 'A';
-            
-            const options = { a: '-', b: '-', c: '-', d: '-' };
-            
-            // Ekstrak pilihan
-            const optionPatterns = [
-                { key: 'a', regex: /(?:Pilihan\s*A|A\.)\s*[:.]?\s*([^\n]+)/i },
-                { key: 'b', regex: /(?:Pilihan\s*B|B\.)\s*[:.]?\s*([^\n]+)/i },
-                { key: 'c', regex: /(?:Pilihan\s*C|C\.)\s*[:.]?\s*([^\n]+)/i },
-                { key: 'd', regex: /(?:Pilihan\s*D|D\.)\s*[:.]?\s*([^\n]+)/i }
-            ];
-            
-            optionPatterns.forEach(({ key, regex }) => {
-                const optMatch = optionsBlock.match(regex);
-                if (optMatch) {
-                    options[key] = optMatch[1].trim();
-                }
-            });
-            
-            if (pertanyaan && options.a) {
-                questions.push({
-                    pertanyaan: pertanyaan,
-                    a: options.a,
-                    b: options.b,
-                    c: options.c,
-                    d: options.d,
-                    jawaban: jawaban
-                });
-            }
-        }
-        
-        console.log(`📊 Metode 1 menemukan: ${questions.length} soal`);
-        
-        // ============================================================
-        // METODE 2: Format nomor soal (1. / 1) + pilihan A. B. C. D.
-        // ============================================================
-        if (questions.length === 0) {
-            const numberRegex = /(?:^|\n)\s*(\d+)\.?\s+([^\n]+)\s*\n((?:\s*[A-D]\.\s*[^\n]+\s*)+)/g;
-            
-            while ((match = numberRegex.exec(cleanText)) !== null) {
-                const pertanyaan = match[2].trim();
-                const optionsBlock = match[3];
-                
-                const options = { a: '-', b: '-', c: '-', d: '-' };
-                const optionRegex = /([A-D])\.\s*([^\n]+)/g;
-                let optMatch;
-                while ((optMatch = optionRegex.exec(optionsBlock)) !== null) {
-                    const key = optMatch[1].toLowerCase();
-                    options[key] = optMatch[2].trim();
-                }
-                
-                let jawaban = 'A';
-                const jawabanMatch = cleanText.substring(0, 5000).match(new RegExp(`Jawaban\\s*[:.]?\\s*([A-D])`, 'i'));
-                if (jawabanMatch) {
-                    jawaban = jawabanMatch[1].toUpperCase();
-                }
-                
-                if (pertanyaan && options.a) {
-                    questions.push({
-                        pertanyaan: pertanyaan,
-                        a: options.a,
-                        b: options.b,
-                        c: options.c,
-                        d: options.d,
-                        jawaban: jawaban
-                    });
-                }
-            }
-            console.log(`📊 Metode 2 menemukan: ${questions.length} soal`);
-        }
-        
-        // ============================================================
-        // METODE 3: Split dengan separator (---, ===, atau baris kosong)
-        // ============================================================
-        if (questions.length === 0) {
-            const separators = ['---', '===', '\n\n\n\n', '\n\n'];
-            let separator = separators.find(sep => cleanText.includes(sep));
-            
-            if (separator) {
-                const blocks = cleanText.split(separator).filter(b => b.trim().length > 20);
-                
-                blocks.forEach(block => {
-                    const lines = block.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-                    
-                    if (lines.length >= 4) {
-                        let pertanyaan = '';
-                        let options = { a: '-', b: '-', c: '-', d: '-' };
-                        let jawaban = 'A';
-                        
-                        lines.forEach(line => {
-                            if (!/^[A-D][\.)]/.test(line) && !/^Pilihan\s*[A-D]/i.test(line) && !/^Jawaban/i.test(line)) {
-                                if (!pertanyaan) pertanyaan = line;
-                            }
-                            
-                            const optionMatch = line.match(/^([A-D])[\.)]\s*(.+)/);
-                            if (optionMatch) {
-                                const key = optionMatch[1].toLowerCase();
-                                options[key] = optionMatch[2].trim();
-                            }
-                            
-                            const jawabMatch = line.match(/^Jawaban\s*[:.]?\s*([A-D])/i);
-                            if (jawabMatch) {
-                                jawaban = jawabMatch[1].toUpperCase();
-                            }
-                        });
-                        
-                        if (pertanyaan && options.a) {
-                            questions.push({
-                                pertanyaan: pertanyaan,
-                                a: options.a,
-                                b: options.b,
-                                c: options.c,
-                                d: options.d,
-                                jawaban: jawaban
-                            });
-                        }
-                    }
-                });
-                console.log(`📊 Metode 3 menemukan: ${questions.length} soal`);
-            }
-        }
-        
-        // ============================================================
-        // METODE 4: Fallback - cari pola A. B. C. D. di teks
-        // ============================================================
-        if (questions.length === 0) {
-            console.log('🔄 Mencoba metode fallback...');
-            
-            // Cari blok yang mengandung A. B. C. D.
-            const blockRegex = /([^\n]+(?:\n[^\n]+)*?)\s*(?:[A-D]\.\s*[^\n]+\s*){3,}/g;
-            let blockMatch;
-            
-            while ((blockMatch = blockRegex.exec(cleanText)) !== null) {
-                const block = blockMatch[1] + '\n' + blockMatch[0];
-                const lines = block.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-                
-                if (lines.length >= 4) {
-                    let pertanyaan = '';
-                    let options = { a: '-', b: '-', c: '-', d: '-' };
-                    
-                    lines.forEach(line => {
-                        if (!/^[A-D][\.)]/.test(line)) {
-                            if (!pertanyaan) pertanyaan = line;
-                        }
-                        
-                        const optionMatch = line.match(/^([A-D])[\.)]\s*(.+)/);
-                        if (optionMatch) {
-                            const key = optionMatch[1].toLowerCase();
-                            options[key] = optionMatch[2].trim();
-                        }
-                    });
-                    
-                    if (pertanyaan && options.a) {
-                        questions.push({
-                            pertanyaan: pertanyaan,
-                            a: options.a,
-                            b: options.b,
-                            c: options.c,
-                            d: options.d,
-                            jawaban: 'A'
-                        });
-                    }
-                }
-            }
-            console.log(`📊 Metode 4 (fallback) menemukan: ${questions.length} soal`);
-        }
-        
-        // Hapus duplikat berdasarkan pertanyaan
-        const uniqueQuestions = [];
-        const seenQuestions = new Set();
-        
-        questions.forEach(q => {
-            const key = q.pertanyaan.substring(0, 30).toLowerCase();
-            if (!seenQuestions.has(key)) {
-                seenQuestions.add(key);
-                uniqueQuestions.push(q);
-            }
-        });
-        
-        console.log(`✅ Total soal unik: ${uniqueQuestions.length}`);
-        return uniqueQuestions;
-    }
-
-    // ============================================================
-    // RENDER FUNCTIONS
+    // RENDER FUNCTIONS - LENGKAP
     // ============================================================
 
     function renderStats() {
-        // TOTAL USER
         const totalUsers = userData.length;
         const totalAdmin = userData.filter(u => u.role === 'admin').length;
         const totalGuru = userData.filter(u => u.role === 'guru').length;
 
-        // TOTAL PESERTA (UNIK)
         const uniquePeserta = groupPesertaByName(pesertaData);
         const totalPeserta = uniquePeserta.length;
         const pesertaSudahUjian = uniquePeserta.filter(p => p.skor > 0);
         const aktif = pesertaSudahUjian.length;
         const selesai = pesertaSudahUjian.filter(p => p.status === 'Lulus' || p.status === 'Tidak Lulus').length;
 
-        // TOTAL SOAL
         const totalSoal = soalData.length;
         const soalPretest = soalData.filter(s => s.jenis === 'pretest');
         const soalPosttest = soalData.filter(s => s.jenis === 'posttest');
 
-        // RATA-RATA NILAI
         const semuaSkor = uniquePeserta.filter(p => p.skor > 0).map(p => p.skor);
         const rataRata = semuaSkor.length > 0 ? Math.round(semuaSkor.reduce((a, b) => a + b, 0) / semuaSkor.length) : 0;
         
@@ -836,14 +526,11 @@
         const rataPretest = pretestData.length > 0 ? Math.round(pretestData.reduce((a, b) => a + b.skor, 0) / pretestData.length) : 0;
         const rataPosttest = posttestData.length > 0 ? Math.round(posttestData.reduce((a, b) => a + b.skor, 0) / posttestData.length) : 0;
 
-        // NILAI TERTINGGI
         const nilaiTertinggi = semuaSkor.length > 0 ? Math.max(...semuaSkor) : 0;
         const pesertaTerbaik = uniquePeserta.find(p => p.skor === nilaiTertinggi && p.skor > 0);
 
-        // PRETEST COUNT
         const pretest = pesertaData.filter(p => p.ujian === 'pretest');
 
-        // UPDATE DOM
         if (elements.totalUsers) elements.totalUsers.textContent = totalUsers;
         if (elements.totalAdmin) elements.totalAdmin.textContent = totalAdmin;
         if (elements.totalGuru) elements.totalGuru.textContent = totalGuru;
@@ -878,17 +565,6 @@
         if (elements.posttestRata) elements.posttestRata.textContent = rataPosttest;
 
         updateStorageInfo();
-
-        console.log('📊 Stats dihitung:', {
-            totalSoal: totalSoal,
-            soalPretest: soalPretest.length,
-            soalPosttest: soalPosttest.length,
-            rataRata: rataRata,
-            rataPretest: rataPretest,
-            rataPosttest: rataPosttest,
-            nilaiTertinggi: nilaiTertinggi,
-            pesertaTerbaik: pesertaTerbaik ? pesertaTerbaik.nama : '-'
-        });
     }
 
     function renderUserTable() {
@@ -962,21 +638,11 @@
             let guruDataHtml = '-';
             if (u.role === 'guru') {
                 const guruItems = [];
-                if (u.nip) guruItems.push(
-                    `<span class="guru-row"><span class="guru-label">NIP</span><span class="guru-value">${u.nip}</span></span>`
-                );
-                if (u.nuptk) guruItems.push(
-                    `<span class="guru-row"><span class="guru-label">NUPTK</span><span class="guru-value">${u.nuptk}</span></span>`
-                );
-                if (ttlDisplay !== '-') guruItems.push(
-                    `<span class="guru-row"><span class="guru-label">TTL</span><span class="guru-value">${ttlDisplay}</span></span>`
-                );
-                if (u.nama_sekolah) guruItems.push(
-                    `<span class="guru-row"><span class="guru-label">Sekolah</span><span class="guru-value">${u.nama_sekolah}</span></span>`
-                );
-                if (u.mapel) guruItems.push(
-                    `<span class="guru-row"><span class="guru-label">Mapel</span><span class="guru-value">${u.mapel}</span></span>`
-                );
+                if (u.nip) guruItems.push(`<span class="guru-row"><span class="guru-label">NIP</span><span class="guru-value">${u.nip}</span></span>`);
+                if (u.nuptk) guruItems.push(`<span class="guru-row"><span class="guru-label">NUPTK</span><span class="guru-value">${u.nuptk}</span></span>`);
+                if (ttlDisplay !== '-') guruItems.push(`<span class="guru-row"><span class="guru-label">TTL</span><span class="guru-value">${ttlDisplay}</span></span>`);
+                if (u.nama_sekolah) guruItems.push(`<span class="guru-row"><span class="guru-label">Sekolah</span><span class="guru-value">${u.nama_sekolah}</span></span>`);
+                if (u.mapel) guruItems.push(`<span class="guru-row"><span class="guru-label">Mapel</span><span class="guru-value">${u.mapel}</span></span>`);
                 if (guruItems.length > 0) {
                     guruDataHtml = `<div class="guru-compact">${guruItems.join('')}</div>`;
                 }
@@ -1020,17 +686,12 @@
         let filteredData = [...groupedData];
 
         if (filter !== 'all') {
-            filteredData = filteredData.filter(p =>
-                p.ujianData.some(u => u.jenis === filter)
-            );
+            filteredData = filteredData.filter(p => p.ujianData.some(u => u.jenis === filter));
         }
 
         if (search) {
             const s = search.toLowerCase();
-            filteredData = filteredData.filter(p =>
-                p.nama.toLowerCase().includes(s) ||
-                p.nip.includes(s)
-            );
+            filteredData = filteredData.filter(p => p.nama.toLowerCase().includes(s) || p.nip.includes(s));
         }
 
         if (totalSpan) {
@@ -1078,12 +739,9 @@
             }
 
             let ujianBadge = '';
-            if (pretestSkor > 0) ujianBadge +=
-                `<span class="exam-badge pretest" style="margin-right:4px;">📋 Pretest ${pretestSkor}</span>`;
-            if (posttestSkor > 0) ujianBadge +=
-                `<span class="exam-badge posttest">📝 Posttest ${posttestSkor}</span>`;
-            if (!pretestSkor && !posttestSkor) ujianBadge =
-                '<span style="color:#8a9aa8;font-size:0.8em;">Belum ada ujian</span>';
+            if (pretestSkor > 0) ujianBadge += `<span class="exam-badge pretest" style="margin-right:4px;">📋 Pretest ${pretestSkor}</span>`;
+            if (posttestSkor > 0) ujianBadge += `<span class="exam-badge posttest">📝 Posttest ${posttestSkor}</span>`;
+            if (!pretestSkor && !posttestSkor) ujianBadge = '<span style="color:#8a9aa8;font-size:0.8em;">Belum ada ujian</span>';
 
             return `
                 <tr>
@@ -1286,7 +944,7 @@
             const s = search.toLowerCase();
             data = data.filter(h =>
                 h.guru.toLowerCase().includes(s) ||
-                h.nip.includes(s) ||
+                (h.nip && h.nip.includes(s)) ||
                 h.sekolah.toLowerCase().includes(s)
             );
         }
@@ -1349,7 +1007,7 @@
         const tidakLulus = data.filter(h => h.status === 'TIDAK LULUS').length;
         const pretest = data.filter(h => h.type === 'pretest').length;
         const posttest = data.filter(h => h.type === 'posttest').length;
-        const rataNilai = total > 0 ? Math.round(data.reduce((a, b) => a + b.nilai, 0) / total) : 0;
+        const rataNilai = total > 0 ? Math.round(data.reduce((a, b) => a + (b.nilai || 0), 0) / total) : 0;
 
         if (elements.statTotalUjian) elements.statTotalUjian.textContent = total;
         if (elements.statRataNilai) elements.statRataNilai.textContent = rataNilai;
@@ -1363,18 +1021,13 @@
         const data = pesertaData.filter(p => p.ujian === 'pretest');
         const tbody = elements.kelolaPretestBody;
         
-        if (elements.kelolaPretestPeserta) {
-            elements.kelolaPretestPeserta.textContent = data.length;
-        }
-        if (elements.kelolaPretestSoal) {
-            elements.kelolaPretestSoal.textContent = soalData.filter(s => s.jenis === 'pretest').length;
-        }
+        if (elements.kelolaPretestPeserta) elements.kelolaPretestPeserta.textContent = data.length;
+        if (elements.kelolaPretestSoal) elements.kelolaPretestSoal.textContent = soalData.filter(s => s.jenis === 'pretest').length;
 
         if (!tbody) return;
 
         if (data.length === 0) {
-            tbody.innerHTML =
-                `<tr><td colspan="4" style="text-align:center;padding:20px;color:#8a9aa8;">Belum ada peserta pretest</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;padding:20px;color:#8a9aa8;">Belum ada peserta pretest</td></tr>`;
             return;
         }
 
@@ -1399,18 +1052,13 @@
         const data = pesertaData.filter(p => p.ujian === 'posttest');
         const tbody = elements.kelolaPosttestBody;
         
-        if (elements.kelolaPosttestPeserta) {
-            elements.kelolaPosttestPeserta.textContent = data.length;
-        }
-        if (elements.kelolaPosttestSoal) {
-            elements.kelolaPosttestSoal.textContent = soalData.filter(s => s.jenis === 'posttest').length;
-        }
+        if (elements.kelolaPosttestPeserta) elements.kelolaPosttestPeserta.textContent = data.length;
+        if (elements.kelolaPosttestSoal) elements.kelolaPosttestSoal.textContent = soalData.filter(s => s.jenis === 'posttest').length;
 
         if (!tbody) return;
 
         if (data.length === 0) {
-            tbody.innerHTML =
-                `<tr><td colspan="4" style="text-align:center;padding:20px;color:#8a9aa8;">Belum ada peserta posttest</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;padding:20px;color:#8a9aa8;">Belum ada peserta posttest</td></tr>`;
             return;
         }
 
@@ -1493,6 +1141,8 @@
         closeModal('modalTambahUser');
         refreshData();
         showToast('success', `✅ User ${role} berhasil ditambahkan!`);
+        
+        // Reset form
         document.getElementById('userUsername').value = '';
         document.getElementById('userEmail').value = '';
         document.getElementById('userFullname').value = '';
@@ -1628,6 +1278,7 @@
         closeModal('modalTambahPeserta');
         refreshData();
         showToast('success', `✅ Peserta "${nama}" berhasil ditambahkan! (${newUjian.length} ujian)`);
+        
         document.getElementById('namaPeserta').value = '';
         document.getElementById('nipPeserta').value = '';
         document.getElementById('kelasPeserta').value = '';
@@ -1644,14 +1295,9 @@
         const pretestData = pesertaItems.find(item => item.ujian === 'pretest');
         const posttestData = pesertaItems.find(item => item.ujian === 'posttest');
 
-        let message =
-            `✏️ Edit Skor untuk ${p.nama}\n\nNIP: ${p.nip}\nKelas: ${p.kelas || '-'}\n\n`;
-        if (pretestData) {
-            message += `Pretest: ${pretestData.skor || 0}\n`;
-        }
-        if (posttestData) {
-            message += `Posttest: ${posttestData.skor || 0}\n`;
-        }
+        let message = `✏️ Edit Skor untuk ${p.nama}\n\nNIP: ${p.nip}\nKelas: ${p.kelas || '-'}\n\n`;
+        if (pretestData) message += `Pretest: ${pretestData.skor || 0}\n`;
+        if (posttestData) message += `Posttest: ${posttestData.skor || 0}\n`;
         message += `\nMasukkan nilai baru (kosongkan untuk skip):`;
 
         const newSkor = prompt(message, '');
@@ -1729,9 +1375,7 @@
     function viewPeserta(id) {
         const p = pesertaData.find(p => p.id === id);
         if (p) {
-            alert(
-                `📋 Detail Peserta\n\nNama: ${p.nama}\nNIP: ${p.nip}\nUjian: ${p.ujian}\nSkor: ${p.skor}\nStatus: ${p.status}\nKelas: ${p.kelas || '-'}`
-            );
+            alert(`📋 Detail Peserta\n\nNama: ${p.nama}\nNIP: ${p.nip}\nUjian: ${p.ujian}\nSkor: ${p.skor}\nStatus: ${p.status}\nKelas: ${p.kelas || '-'}`);
         }
     }
 
@@ -1781,6 +1425,7 @@
         closeModal('modalTambahSoal');
         refreshData();
         showToast('success', '✅ Soal berhasil ditambahkan!');
+        
         document.getElementById('pertanyaanSoal').value = '';
         document.getElementById('pilihanA').value = '';
         document.getElementById('pilihanB').value = '';
@@ -1812,20 +1457,16 @@
     }
 
     // ============================================================
-    // UPLOAD SOAL DARI WORD - INTEGRASI PARSER
+    // UPLOAD SOAL DARI WORD (DIPERBAIKI DENGAN MAMMOTH.JS)
     // ============================================================
 
     function handleFileUpload(event) {
         const file = event.target.files[0];
         if (!file) return;
 
-        const validTypes = [
-            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-            'application/msword'
-        ];
-
-        if (!validTypes.includes(file.type) && !file.name.endsWith('.docx') && !file.name.endsWith('.doc')) {
-            showToast('error', '❌ Mohon upload file Word (.docx atau .doc)');
+        // HANYA terima .docx karena Mammoth.js tidak mendukung .doc lama di browser
+        if (!file.name.endsWith('.docx') && file.type !== 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+            showToast('error', '❌ Mohon upload file Word format .docx (bukan .doc)');
             return;
         }
 
@@ -1845,27 +1486,128 @@
         if (progress) progress.classList.add('show');
         isUploading = true;
 
+        // Simulasi progress visual sambil Mammoth memproses file
         let progressValue = 0;
         const interval = setInterval(() => {
-            progressValue += Math.random() * 15 + 5;
-            if (progressValue > 100) progressValue = 100;
+            progressValue += 10;
+            if (progressValue > 90) progressValue = 90; // Tahan di 90% sampai parsing selesai
 
             if (fill) fill.style.width = progressValue + '%';
-            if (text) text.textContent = `Mengupload ${Math.round(progressValue)}%`;
+            if (text) text.textContent = `Membaca file ${Math.round(progressValue)}%`;
+        }, 100);
 
-            if (progressValue >= 100) {
+        // Proses baca file sebenarnya
+        const reader = new FileReader();
+        reader.onload = function(loadEvent) {
+            const arrayBuffer = loadEvent.target.result;
+            
+            // Cek apakah library Mammoth tersedia
+            if (typeof mammoth === 'undefined') {
                 clearInterval(interval);
+                showToast('error', '❌ Library Mammoth.js belum dimuat. Periksa tag <script> di HTML Anda.');
+                if (progress) progress.classList.remove('show');
                 isUploading = false;
-                setTimeout(() => {
-                    parseWordFile(file);
-                }, 500);
+                return;
             }
-        }, 200);
+
+            // Mammoth mengekstrak teks dari .docx
+            mammoth.extractRawText({ arrayBuffer: arrayBuffer })
+                .then(function(result) {
+                    clearInterval(interval);
+                    if (fill) fill.style.width = '100%';
+                    if (text) text.textContent = `Selesai 100%`;
+                    
+                    setTimeout(() => {
+                        parseWordText(result.value); // Kirim teks hasil ekstrak ke parser
+                    }, 500);
+                })
+                .catch(function(err) {
+                    clearInterval(interval);
+                    console.error(err);
+                    showToast('error', '❌ Gagal membaca file Word. Pastikan format benar dan file tidak rusak.');
+                    if (progress) progress.classList.remove('show');
+                    isUploading = false;
+                });
+        };
+        reader.readAsArrayBuffer(file);
     }
 
-    // ============================================================
-    // PREVIEW & UPLOADED SOAL MANAGEMENT
-    // ============================================================
+    function parseWordText(rawText) {
+        const text = rawText.trim();
+        if (!text) {
+            showToast('warning', '⚠️ File Word kosong atau tidak dapat dibaca.');
+            return;
+        }
+
+        // Pisahkan berdasarkan "Pertanyaan:" atau angka di awal baris (sesuaikan dengan template Anda)
+        const soalBlocks = text.split(/(?=Pertanyaan:|^\d+[\.\)]\s)/gm).filter(block => block.trim().length > 0);
+
+        if (soalBlocks.length === 0) {
+            showToast('error', '❌ Format soal tidak dikenali. Gunakan template yang disediakan.');
+            return;
+        }
+
+        uploadedSoalData = soalBlocks.map((block, index) => {
+            return extractQuestionData(block, index + 1);
+        }).filter(q => q.pertanyaan !== ''); // Hapus yang gagal diparse
+
+        console.log('📝 Hasil parsing Word:', uploadedSoalData);
+        showPreview();
+
+        const uploadArea = elements.uploadArea;
+        if (uploadArea) {
+            uploadArea.style.borderColor = '#059669';
+            const title = uploadArea.querySelector('.upload-title');
+            const desc = uploadArea.querySelector('.upload-desc');
+            if (title) title.textContent = '✅ File berhasil dibaca!';
+            if (desc) desc.textContent = `Ditemukan ${uploadedSoalData.length} soal dari file`;
+        }
+
+        showToast('success', `📄 ${uploadedSoalData.length} soal berhasil diekstrak!`);
+        isUploading = false;
+    }
+
+    // Helper: Mengubah teks mentah satu blok soal menjadi Object JSON
+    function extractQuestionData(block, defaultId) {
+        const lines = block.split('\n').map(line => line.trim()).filter(line => line !== '');
+        
+        let pertanyaan = '';
+        let a = '-', b = '-', c = '-', d = '-';
+        let jawaban = 'A';
+
+        lines.forEach(line => {
+            const lowerLine = line.toLowerCase();
+            if (lowerLine.startsWith('pertanyaan:') || /^\d+[\.\)]\s/.test(line)) {
+                pertanyaan = line.replace(/^(pertanyaan:|\d+[\.\)]\s)/i, '').trim();
+            } else if (lowerLine.startsWith('pilihan a:') || lowerLine.startsWith('a.')) {
+                a = line.replace(/^(pilihan a:|a\.)/i, '').trim();
+            } else if (lowerLine.startsWith('pilihan b:') || lowerLine.startsWith('b.')) {
+                b = line.replace(/^(pilihan b:|b\.)/i, '').trim();
+            } else if (lowerLine.startsWith('pilihan c:') || lowerLine.startsWith('c.')) {
+                c = line.replace(/^(pilihan c:|c\.)/i, '').trim();
+            } else if (lowerLine.startsWith('pilihan d:') || lowerLine.startsWith('d.')) {
+                d = line.replace(/^(pilihan d:|d\.)/i, '').trim();
+            } else if (lowerLine.startsWith('jawaban:')) {
+                jawaban = line.replace(/^jawaban:/i, '').trim().toUpperCase();
+            }
+        });
+
+        // Fallback jika regex gagal menangkap pertanyaan tapi ada isinya
+        if (!pertanyaan && lines.length > 0) {
+            pertanyaan = lines[0];
+        }
+
+        return {
+            id: 'temp_' + Date.now() + '_' + defaultId,
+            pertanyaan: pertanyaan,
+            a: a,
+            b: b,
+            c: c,
+            d: d,
+            jawaban: jawaban,
+            bobot: 1
+        };
+    }
 
     function showPreview() {
         const container = elements.soalPreview;
@@ -1881,8 +1623,7 @@
         count.textContent = `${uploadedSoalData.length} soal`;
 
         if (uploadedSoalData.length === 0) {
-            list.innerHTML =
-                `<div style="text-align:center;padding:20px;color:#8a9aa8;">Tidak ada soal untuk ditampilkan</div>`;
+            list.innerHTML = `<div style="text-align:center;padding:20px;color:#8a9aa8;">Tidak ada soal untuk ditampilkan</div>`;
             return;
         }
 
@@ -1912,7 +1653,11 @@
         if (!q) return;
 
         document.getElementById('editSoalId').value = index;
-        document.getElementById('editJenisSoal').value = document.getElementById('jenisSoalUpload').value || 'pretest';
+        
+        // PERBAIKAN MINOR: Cek keberadaan elemen sebelum mengakses value
+        const jenisUploadEl = document.getElementById('jenisSoalUpload');
+        document.getElementById('editJenisSoal').value = (jenisUploadEl ? jenisUploadEl.value : 'pretest');
+        
         document.getElementById('editPertanyaan').value = q.pertanyaan;
         document.getElementById('editPilihanA').value = q.a;
         document.getElementById('editPilihanB').value = q.b;
@@ -1942,6 +1687,7 @@
         q.bobot = parseInt(document.getElementById('editBobot').value) || 1;
 
         showPreview();
+        closeModal('modalEditSoal');
         showToast('success', '✅ Soal berhasil diperbarui!');
     }
 
@@ -1982,7 +1728,8 @@
             return;
         }
 
-        const jenis = document.getElementById('jenisSoalUpload').value || 'pretest';
+        const jenisUploadEl = document.getElementById('jenisSoalUpload');
+        const jenis = (jenisUploadEl ? jenisUploadEl.value : 'pretest');
 
         let savedCount = 0;
         uploadedSoalData.forEach(q => {
@@ -2027,48 +1774,48 @@
 
     function downloadTemplate() {
         const template = `
-    ============================================================
-    TEMPLATE SOAL UJIAN ONLINE
-    ============================================================
+============================================================
+TEMPLATE SOAL UJIAN ONLINE
+============================================================
 
-    Format: Setiap soal terdiri dari:
-    1. Pertanyaan
-    2. Pilihan A
-    3. Pilihan B
-    4. Pilihan C (opsional)
-    5. Pilihan D (opsional)
-    6. Jawaban Benar (A/B/C/D)
+Format: Setiap soal terdiri dari:
+1. Pertanyaan
+2. Pilihan A
+3. Pilihan B
+4. Pilihan C (opsional)
+5. Pilihan D (opsional)
+6. Jawaban Benar (A/B/C/D)
 
-    ============================================================
-    CONTOH SOAL:
-    ============================================================
+============================================================
+CONTOH SOAL:
+============================================================
 
-    Pertanyaan: Apa ibu kota Indonesia?
-    Pilihan A: Jakarta
-    Pilihan B: Bandung
-    Pilihan C: Surabaya
-    Pilihan D: Medan
-    Jawaban: A
+Pertanyaan: Apa ibu kota Indonesia?
+Pilihan A: Jakarta
+Pilihan B: Bandung
+Pilihan C: Surabaya
+Pilihan D: Medan
+Jawaban: A
 
-    Pertanyaan: Siapa presiden pertama Indonesia?
-    Pilihan A: Soekarno
-    Pilihan B: Soeharto
-    Pilihan C: Habibie
-    Pilihan D: Gus Dur
-    Jawaban: A
+Pertanyaan: Siapa presiden pertama Indonesia?
+Pilihan A: Soekarno
+Pilihan B: Soeharto
+Pilihan C: Habibie
+Pilihan D: Gus Dur
+Jawaban: A
 
-    ============================================================
-    CATATAN:
-    - Pisahkan setiap soal dengan garis (---)
-    - Gunakan format di atas untuk setiap soal
-    - File dapat disimpan sebagai .txt atau .docx
-    ============================================================`;
+============================================================
+CATATAN:
+- Pisahkan setiap soal dengan baris baru
+- Gunakan format di atas untuk setiap soal
+- File HARUS disimpan sebagai .docx (Word 2007+)
+============================================================`;
 
         const blob = new Blob([template], { type: 'text/plain' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = 'template_soal_ujian.txt';
+        a.download = 'template_soal_ujian.docx.txt';
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
@@ -2134,18 +1881,10 @@
             panel.classList.toggle('active', panel.id === `tab-${tab}`);
         });
 
-        if (tab === 'hasil') {
-            renderHasilUjian();
-        }
-        if (tab === 'users') {
-            renderUserTable();
-        }
-        if (tab === 'peserta') {
-            renderTable();
-        }
-        if (tab === 'soal') {
-            renderSoalTable();
-        }
+        if (tab === 'hasil') renderHasilUjian();
+        if (tab === 'users') renderUserTable();
+        if (tab === 'peserta') renderTable();
+        if (tab === 'soal') renderSoalTable();
         if (tab === 'ujian') {
             renderKelolaPretest();
             renderKelolaPosttest();
@@ -2171,19 +1910,16 @@
             const modal = document.getElementById(modalId);
             if (modal) modal.classList.add('show');
 
-            if (type === 'kelolaPretest') {
-                renderKelolaPretest();
-            }
-            if (type === 'kelolaPosttest') {
-                renderKelolaPosttest();
-            }
+            if (type === 'kelolaPretest') renderKelolaPretest();
+            if (type === 'kelolaPosttest') renderKelolaPosttest();
+            
             if (type === 'tambahSoal' || type === 'tambahSoalPretest' || type === 'tambahSoalPosttest') {
                 const jenisSoal = document.getElementById('jenisSoal');
                 if (jenisSoal) {
-                    jenisSoal.value = type === 'tambahSoalPretest' ? 'pretest' : type ===
-                        'tambahSoalPosttest' ? 'posttest' : 'pretest';
+                    jenisSoal.value = type === 'tambahSoalPretest' ? 'pretest' : type === 'tambahSoalPosttest' ? 'posttest' : 'pretest';
                 }
             }
+            
             if (type === 'uploadSoal') {
                 const progress = elements.uploadProgress;
                 if (progress) progress.classList.remove('show');
@@ -2222,33 +1958,16 @@
         renderKelolaPosttest();
         renderHasilUjian();
         updateStorageInfo();
-        showToast('info', '🔄 Data berhasil diperbarui!');
     }
 
-    function filterUserTable() {
-        renderUserTable();
-    }
-
-    function filterTable() {
-        renderTable();
-    }
-
-    function filterSoalTable() {
-        renderSoalTable();
-    }
-
-    function filterHasilTable() {
-        renderHasilUjian();
-    }
-
-    function updateChart() {
-        renderChart();
-    }
+    function filterUserTable() { renderUserTable(); }
+    function filterTable() { renderTable(); }
+    function filterSoalTable() { renderSoalTable(); }
+    function filterHasilTable() { renderHasilUjian(); }
+    function updateChart() { renderChart(); }
 
     function viewDetail(type) {
-        alert(
-            `📊 Detail ${type.toUpperCase()}\n\nTotal Peserta: ${pesertaData.filter(p => p.ujian === type).length}\nTotal Soal: ${soalData.filter(s => s.jenis === type).length}`
-        );
+        alert(`📊 Detail ${type.toUpperCase()}\n\nTotal Peserta: ${pesertaData.filter(p => p.ujian === type).length}\nTotal Soal: ${soalData.filter(s => s.jenis === type).length}`);
     }
 
     function handleLogout() {
@@ -2273,11 +1992,7 @@
         const role = document.getElementById('userRole');
         const guruFields = document.getElementById('guruFields');
         if (role && guruFields) {
-            if (role.value === 'guru') {
-                guruFields.style.display = 'block';
-            } else {
-                guruFields.style.display = 'none';
-            }
+            guruFields.style.display = role.value === 'guru' ? 'block' : 'none';
         }
     }
 
@@ -2291,249 +2006,175 @@
     }
 
     // ============================================================
-// INIT - DENGAN GITHUB SYNC
-// ============================================================
-
-async function init() {
+    // INIT
     // ============================================================
-    // 1. CEK SESSION
-    // ============================================================
-    let session = sessionStorage.getItem('userSession');
-    if (!session) session = localStorage.getItem('userSession');
 
-    if (!session) {
-        window.location.href = '../../public/login.html';
-        return;
-    }
+    function init() {
+        // Cek session
+        let session = sessionStorage.getItem('userSession');
+        if (!session) session = localStorage.getItem('userSession');
 
-    try {
-        const data = JSON.parse(session);
-        if (data.user.role !== 'admin') {
+        if (!session) {
             window.location.href = '../../public/login.html';
             return;
         }
-        if (elements.adminName) {
-            elements.adminName.textContent = data.user.name || 'Administrator';
+
+        try {
+            const data = JSON.parse(session);
+            if (data.user.role !== 'admin') {
+                window.location.href = '../../public/login.html';
+                return;
+            }
+            if (elements.adminName) {
+                elements.adminName.textContent = data.user.name || 'Administrator';
+            }
+            console.log('👑 Login sebagai:', data.user.name);
+        } catch (e) {
+            window.location.href = '../../public/login.html';
         }
-        console.log('👑 Login sebagai:', data.user.name);
-    } catch (e) {
-        window.location.href = '../../public/login.html';
-        return;
-    }
 
-    // ============================================================
-    // 2. LOAD DATA DARI LOCALSTORAGE
-    // ============================================================
-    const hasData = loadData();
-
-    if (!hasData) {
-        createDefaultAdmin();
-    } else {
-        const hasAdmin = userData.some(u => u.username === 'admin');
-        if (!hasAdmin) {
+        // Load data
+        const hasData = loadData();
+        if (!hasData) {
             createDefaultAdmin();
-        }
-    }
-
-    // ============================================================
-    // 3. LOAD DATA DARI GITHUB (SYNC)
-    // ============================================================
-    console.log('📥 Mencoba sync data dari GitHub...');
-    
-    try {
-        // Cek apakah fungsi loadDataFromGitHub tersedia
-        if (typeof loadDataFromGitHub === 'function') {
-            const loaded = await loadDataFromGitHub();
-            
-            if (loaded) {
-                // Reload data dari localStorage setelah sync
-                loadData();
-                console.log('✅ Data berhasil disinkronisasi dari GitHub');
-                showToast('success', '☁️ Data berhasil disinkronisasi dari GitHub!');
-            } else {
-                console.log('📌 Tidak ada data baru dari GitHub, menggunakan data lokal');
-            }
         } else {
-            console.warn('⚠️ Fungsi loadDataFromGitHub tidak ditemukan. Pastikan github-sync.js sudah di-load.');
+            const hasAdmin = userData.some(u => u.username === 'admin');
+            if (!hasAdmin) createDefaultAdmin();
         }
-    } catch (error) {
-        console.error('❌ Gagal sync dari GitHub:', error);
-        // Lanjutkan dengan data lokal
-    }
 
-    // ============================================================
-    // 4. LOAD STATUS UJIAN
-    // ============================================================
-    loadUjianStatus();
+        // Load status ujian
+        loadUjianStatus();
 
-    // ============================================================
-    // 5. RENDER SEMUA DATA
-    // ============================================================
-    refreshData();
+        // Render semua data
+        refreshData();
 
-    // ============================================================
-    // 6. SETUP DRAG & DROP
-    // ============================================================
-    const uploadArea = elements.uploadArea;
-    if (uploadArea) {
-        uploadArea.addEventListener('dragover', function(e) {
-            e.preventDefault();
-            this.classList.add('dragover');
-        });
+        // Setup drag & drop
+        const uploadArea = elements.uploadArea;
+        if (uploadArea) {
+            uploadArea.addEventListener('dragover', function(e) {
+                e.preventDefault();
+                this.classList.add('dragover');
+            });
 
-        uploadArea.addEventListener('dragleave', function(e) {
-            e.preventDefault();
-            this.classList.remove('dragover');
-        });
+            uploadArea.addEventListener('dragleave', function(e) {
+                e.preventDefault();
+                this.classList.remove('dragover');
+            });
 
-        uploadArea.addEventListener('drop', function(e) {
-            e.preventDefault();
-            this.classList.remove('dragover');
-            const files = e.dataTransfer.files;
-            if (files.length > 0) {
-                const file = files[0];
-                const input = elements.fileInput;
-                if (input) {
-                    const dataTransfer = new DataTransfer();
-                    dataTransfer.items.add(file);
-                    input.files = dataTransfer.files;
-                    handleFileUpload({ target: input });
+            uploadArea.addEventListener('drop', function(e) {
+                e.preventDefault();
+                this.classList.remove('dragover');
+                const files = e.dataTransfer.files;
+                if (files.length > 0) {
+                    const file = files[0];
+                    const input = elements.fileInput;
+                    if (input) {
+                        const dataTransfer = new DataTransfer();
+                        dataTransfer.items.add(file);
+                        input.files = dataTransfer.files;
+                        handleFileUpload({ target: input });
+                    }
                 }
-            }
-        });
-    }
-
-    // ============================================================
-    // 7. CLOSE MODAL ON OVERLAY CLICK
-    // ============================================================
-    document.querySelectorAll('.modal-overlay').forEach(overlay => {
-        overlay.addEventListener('click', function(e) {
-            if (e.target === this) {
-                this.classList.remove('show');
-            }
-        });
-    });
-
-    // ============================================================
-    // 8. TOGGLE GURU FIELDS ON ROLE CHANGE
-    // ============================================================
-    const userRole = document.getElementById('userRole');
-    if (userRole) {
-        userRole.addEventListener('change', toggleGuruFields);
-    }
-
-    // ============================================================
-    // 9. KEYBOARD SHORTCUTS
-    // ============================================================
-    document.addEventListener('keydown', function(e) {
-        if (e.key === 'Escape') {
-            document.querySelectorAll('.modal-overlay.show').forEach(m => m.classList.remove('show'));
+            });
         }
 
-        if (e.ctrlKey && e.key === 's') {
-            e.preventDefault();
-            saveData();
-            showToast('success', '💾 Data berhasil disimpan!');
+        // Close modal on overlay click
+        document.querySelectorAll('.modal-overlay').forEach(overlay => {
+            overlay.addEventListener('click', function(e) {
+                if (e.target === this) {
+                    this.classList.remove('show');
+                }
+            });
+        });
+
+        // Toggle guru fields on role change
+        const userRole = document.getElementById('userRole');
+        if (userRole) {
+            userRole.addEventListener('change', toggleGuruFields);
         }
-    });
 
-    // ============================================================
-    // 10. UPDATE SYNC STATUS DI UI
-    // ============================================================
-    const syncStatus = document.getElementById('syncStatus');
-    if (syncStatus && typeof getSyncStatus === 'function') {
-        syncStatus.textContent = getSyncStatus();
+        // Keyboard shortcuts
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                document.querySelectorAll('.modal-overlay.show').forEach(m => m.classList.remove('show'));
+            }
+
+            if (e.ctrlKey && e.key === 's') {
+                e.preventDefault();
+                saveData();
+                showToast('success', '💾 Data berhasil disimpan!');
+            }
+        });
+
+        console.log('✅ Admin Dashboard loaded');
+        console.log(`👤 Total User: ${userData.length}`);
+        console.log(`👥 Total Peserta: ${pesertaData.length}`);
+        console.log(`📝 Total Soal: ${soalData.length}`);
+        console.log('💾 Data disimpan di localStorage');
+        console.log('🔐 Default Admin: admin / admin123');
+        console.log('📋 Status Ujian:', ujianStatus);
+        console.log('💡 Keyboard Shortcuts: Ctrl + S = Simpan, Escape = Tutup modal');
+
+        // Expose functions globally
+        window.switchTab = switchTab;
+        window.openModal = openModal;
+        window.closeModal = closeModal;
+        window.refreshData = refreshData;
+        window.filterUserTable = filterUserTable;
+        window.filterTable = filterTable;
+        window.filterSoalTable = filterSoalTable;
+        window.filterHasilTable = filterHasilTable;
+        window.updateChart = updateChart;
+        window.viewDetail = viewDetail;
+        window.handleLogout = handleLogout;
+        window.resetData = resetData;
+        window.toggleGuruFields = toggleGuruFields;
+        window.tambahUser = tambahUser;
+        window.editUser = editUser;
+        window.viewUser = viewUser;
+        window.deleteUser = deleteUser;
+        window.tambahPeserta = tambahPeserta;
+        window.editPesertaGroup = editPesertaGroup;
+        window.viewPesertaGroup = viewPesertaGroup;
+        window.deletePesertaGroup = deletePesertaGroup;
+        window.editPeserta = editPeserta;
+        window.viewPeserta = viewPeserta;
+        window.deletePeserta = deletePeserta;
+        window.tambahSoal = tambahSoal;
+        window.deleteSoal = deleteSoal;
+        window.hapusSemuaSoal = hapusSemuaSoal;
+        window.editExistingSoal = editExistingSoal;
+        window.saveEditExistingSoal = saveEditExistingSoal;
+        window.handleFileUpload = handleFileUpload;
+        window.startUpload = startUpload;
+        window.parseWordText = parseWordText;
+        window.showPreview = showPreview;
+        window.editUploadedSoal = editUploadedSoal;
+        window.saveEditUploadedSoal = saveEditUploadedSoal;
+        window.deleteUploadedSoal = deleteUploadedSoal;
+        window.clearPreview = clearPreview;
+        window.saveUploadedSoal = saveUploadedSoal;
+        window.downloadTemplate = downloadTemplate;
+        window.generateSampleHasilUjian = generateSampleHasilUjian;
+        window.hapusHasilUjian = hapusHasilUjian;
+        window.hapusSemuaHasil = hapusSemuaHasil;
+        window.cetakHasilUjian = cetakHasilUjian;
+        window.refreshHasilUjian = refreshHasilUjian;
+        window.renderHasilUjian = renderHasilUjian;
+        window.toggleUjian = toggleUjian;
+        window.loadUjianStatus = loadUjianStatus;
+        window.getUjianStatus = getUjianStatus;
+        window.isUjianAktif = isUjianAktif;
+        window.updateUjianUI = updateUjianUI;
+        window.renderStats = renderStats;
+        window.groupPesertaByName = groupPesertaByName;
     }
 
-    // ============================================================
-    // 11. LOGGING
-    // ============================================================
-    console.log('✅ Admin Dashboard loaded');
-    console.log(`👤 Total User: ${userData.length}`);
-    console.log(`👥 Total Peserta: ${pesertaData.length}`);
-    console.log(`📝 Total Soal: ${soalData.length}`);
-    console.log('💾 Data disimpan di localStorage');
-    console.log('🔐 Default Admin: admin / admin123');
-    console.log('📋 Status Ujian:', ujianStatus);
-    console.log('☁️ GitHub Sync:', typeof loadDataFromGitHub === 'function' ? '✅ Tersedia' : '❌ Tidak tersedia');
-    console.log('💡 Keyboard Shortcuts:');
-    console.log('  Ctrl + S = Simpan data');
-    console.log('  Escape = Tutup modal');
+    // Run on DOM ready
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init);
+    } else {
+        init();
+    }
 
-    // ============================================================
-    // 12. EXPOSE FUNCTIONS GLOBALLY
-    // ============================================================
-    window.switchTab = switchTab;
-    window.openModal = openModal;
-    window.closeModal = closeModal;
-    window.refreshData = refreshData;
-    window.filterUserTable = filterUserTable;
-    window.filterTable = filterTable;
-    window.filterSoalTable = filterSoalTable;
-    window.filterHasilTable = filterHasilTable;
-    window.updateChart = updateChart;
-    window.viewDetail = viewDetail;
-    window.handleLogout = handleLogout;
-    window.resetData = resetData;
-    window.toggleGuruFields = toggleGuruFields;
-    window.tambahUser = tambahUser;
-    window.editUser = editUser;
-    window.viewUser = viewUser;
-    window.deleteUser = deleteUser;
-    window.tambahPeserta = tambahPeserta;
-    window.editPesertaGroup = editPesertaGroup;
-    window.viewPesertaGroup = viewPesertaGroup;
-    window.deletePesertaGroup = deletePesertaGroup;
-    window.editPeserta = editPeserta;
-    window.viewPeserta = viewPeserta;
-    window.deletePeserta = deletePeserta;
-    window.tambahSoal = tambahSoal;
-    window.deleteSoal = deleteSoal;
-    window.hapusSemuaSoal = hapusSemuaSoal;
-    window.editExistingSoal = editExistingSoal;
-    window.saveEditExistingSoal = saveEditExistingSoal;
-    window.handleFileUpload = handleFileUpload;
-    window.startUpload = startUpload;
-    window.parseWordFile = parseWordFile;
-    window.parseQuestionsFromText = parseQuestionsFromText;
-    window.showPreview = showPreview;
-    window.editUploadedSoal = editUploadedSoal;
-    window.saveEditUploadedSoal = saveEditUploadedSoal;
-    window.deleteUploadedSoal = deleteUploadedSoal;
-    window.clearPreview = clearPreview;
-    window.saveUploadedSoal = saveUploadedSoal;
-    window.downloadTemplate = downloadTemplate;
-    window.generateSampleHasilUjian = generateSampleHasilUjian;
-    window.hapusHasilUjian = hapusHasilUjian;
-    window.hapusSemuaHasil = hapusSemuaHasil;
-    window.cetakHasilUjian = cetakHasilUjian;
-    window.refreshHasilUjian = refreshHasilUjian;
-    window.renderHasilUjian = renderHasilUjian;
-    window.toggleUjian = toggleUjian;
-    window.loadUjianStatus = loadUjianStatus;
-    window.getUjianStatus = getUjianStatus;
-    window.isUjianAktif = isUjianAktif;
-    window.updateUjianUI = updateUjianUI;
-    window.renderStats = renderStats;
-    window.groupPesertaByName = groupPesertaByName;
-    
-    // ✅ EXPOSE GITHUB SYNC FUNCTIONS
-    if (typeof loadDataFromGitHub === 'function') {
-        window.loadDataFromGitHub = loadDataFromGitHub;
-    }
-    if (typeof saveDataToGitHub === 'function') {
-        window.saveDataToGitHub = saveDataToGitHub;
-    }
-    if (typeof getSyncStatus === 'function') {
-        window.getSyncStatus = getSyncStatus;
-    }
-}
-
-// ============================================================
-// RUN ON DOM READY
-// ============================================================
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
-} else {
-    init();
-}
+})();
